@@ -20,6 +20,7 @@ import {
   ThreadType,
   type API,
   type Credentials,
+  type GroupEvent,
   type SendMessageQuote,
 } from "zca-js";
 import {
@@ -98,6 +99,7 @@ import {
   parsePollId,
   parsePollOptionIds,
 } from "./lib/group-poll.js";
+import { extractInboundPollInfo } from "./lib/listen-poll.js";
 import { parseDurationInput, parseTimeBoundaryInput } from "./lib/time-range.js";
 import {
   hasPotentialOutboundGroupMention,
@@ -1188,9 +1190,12 @@ async function profileForLogin(): Promise<string> {
   return fallback;
 }
 
-async function requireApi(command?: Command): Promise<{ profile: string; api: API }> {
+async function requireApi(
+  command?: Command,
+  options?: { selfListen?: boolean },
+): Promise<{ profile: string; api: API }> {
   const profile = await currentProfile(command);
-  const api = await loginWithStoredCredentials(profile);
+  const api = await loginWithStoredCredentials(profile, options);
   return { profile, api };
 }
 
@@ -6653,6 +6658,7 @@ groupPoll
   .command("create <groupId>")
   .requiredOption("-q, --question <text>", "Poll question")
   .requiredOption("-o, --option <text>", "Poll option (repeatable)", collectValues, [] as string[])
+  .option("-j, --json", "JSON output")
   .option("--multi", "Allow multiple choices")
   .option("--allow-add-option", "Allow members to add new options")
   .option("--hide-vote-preview", "Hide results until the member votes")
@@ -6671,36 +6677,39 @@ groupPoll
           hideVotePreview?: boolean;
           anonymous?: boolean;
           expireMs?: string;
+          json?: boolean;
         },
         command: Command,
       ) => {
         const pollOptions = buildCreatePollOptions(opts);
         const { api } = await requireApi(command);
-        output(await api.createPoll(pollOptions, groupId), false);
+        output(await api.createPoll(pollOptions, groupId), shouldOutputJson(opts));
       },
     ),
   );
 
 groupPoll
   .command("detail <pollId>")
+  .option("-j, --json", "JSON output")
   .description("Get poll detail")
   .action(
-    wrapAction(async (pollId: string, command: Command) => {
+    wrapAction(async (pollId: string, opts: { json?: boolean }, command: Command) => {
       const normalizedPollId = parsePollId(pollId);
       const { api } = await requireApi(command);
-      output(await api.getPollDetail(normalizedPollId), false);
+      output(await api.getPollDetail(normalizedPollId), shouldOutputJson(opts));
     }),
   );
 
 groupPoll
   .command("vote <pollId>")
   .requiredOption("-o, --option <id>", "Poll option id (repeatable)", collectValues, [] as string[])
+  .option("-j, --json", "JSON output")
   .description("Vote on a group poll")
   .action(
     wrapAction(
       async (
         pollId: string,
-        opts: { option?: string[] },
+        opts: { option?: string[]; json?: boolean },
         command: Command,
       ) => {
         const normalizedPollId = parsePollId(pollId);
@@ -6710,30 +6719,32 @@ groupPoll
           normalizedPollId,
           optionIds.length === 1 ? optionIds[0] : optionIds,
         );
-        output(response, false);
+        output(response, shouldOutputJson(opts));
       },
     ),
   );
 
 groupPoll
   .command("lock <pollId>")
+  .option("-j, --json", "JSON output")
   .description("Close a poll")
   .action(
-    wrapAction(async (pollId: string, command: Command) => {
+    wrapAction(async (pollId: string, opts: { json?: boolean }, command: Command) => {
       const normalizedPollId = parsePollId(pollId);
       const { api } = await requireApi(command);
-      output(await api.lockPoll(normalizedPollId), false);
+      output(await api.lockPoll(normalizedPollId), shouldOutputJson(opts));
     }),
   );
 
 groupPoll
   .command("share <pollId>")
+  .option("-j, --json", "JSON output")
   .description("Share a poll")
   .action(
-    wrapAction(async (pollId: string, command: Command) => {
+    wrapAction(async (pollId: string, opts: { json?: boolean }, command: Command) => {
       const normalizedPollId = parsePollId(pollId);
       const { api } = await requireApi(command);
-      output(await api.sharePoll(normalizedPollId), false);
+      output(await api.sharePoll(normalizedPollId), shouldOutputJson(opts));
     }),
   );
 
@@ -7462,6 +7473,7 @@ program
   .option("-p, --prefix <prefix>", "Only process text starting with prefix")
   .option("-w, --webhook <url>", "POST message payload to webhook")
   .option("-r, --raw", "Output JSON line payload")
+  .option("--self", "Include events produced by the logged-in account")
   .option("--db", "Force DB persistence for this listener session")
   .option("--no-db", "Disable DB persistence for this listener session")
   .option("-k, --keep-alive", "Auto restart listener on disconnect")
@@ -7485,6 +7497,7 @@ program
           prefix?: string;
           webhook?: string;
           raw?: boolean;
+          self?: boolean;
           db?: boolean;
           keepAlive?: boolean;
           supervised?: boolean;
@@ -7493,7 +7506,8 @@ program
         },
         command: Command,
       ) => {
-        const { profile, api } = await requireApi(command);
+        const selfListen = Boolean(opts.self);
+        const { profile, api } = await requireApi(command, { selfListen });
         const supervised = Boolean(opts.supervised);
         const defaultRecycleMs = 30 * 60 * 1000;
         const recycleMs =
@@ -7603,6 +7617,7 @@ program
               maxMediaFiles: parseMaxInboundMediaFiles(),
               includeMediaUrl: process.env.OPENZCA_LISTEN_INCLUDE_MEDIA_URL?.trim() ?? null,
               keepAlive: Boolean(opts.keepAlive),
+              selfListen,
               keepAliveRestartDelayMs: Boolean(opts.keepAlive)
                 ? keepAliveRestartDelayMs
                 : undefined,
@@ -7841,6 +7856,7 @@ program
             rawText,
           });
           const mentionIds = mentions.map((item) => item.uid);
+          const poll = extractInboundPollInfo(messageData, parsedContent);
           const timestamp = toEpochSeconds(message.data.ts);
           const timestampMs = toEpochMs(message.data.ts);
 
@@ -7870,6 +7886,11 @@ program
             mediaKind: mediaKind ?? undefined,
             mentions: mentions.length > 0 ? mentions : undefined,
             mentionIds: mentionIds.length > 0 ? mentionIds : undefined,
+            poll: poll ?? undefined,
+            pollId: poll?.pollId,
+            pollTitle: poll?.title,
+            pollOptionIds: poll?.optionIds,
+            rawMessage: poll ? message.data : undefined,
             metadata: {
               isGroup: message.type === ThreadType.Group,
               chatType,
@@ -7900,6 +7921,11 @@ program
               mentions: mentions.length > 0 ? mentions : undefined,
               mentionIds: mentionIds.length > 0 ? mentionIds : undefined,
               mentionCount: mentions.length > 0 ? mentions.length : undefined,
+              poll: poll ?? undefined,
+              pollId: poll?.pollId,
+              pollTitle: poll?.title,
+              pollOptionIds: poll?.optionIds,
+              rawMessage: poll ? message.data : undefined,
             },
             // Backward-compatible convenience fields.
             chatType,
@@ -8008,6 +8034,77 @@ program
               );
             }
           }
+          });
+
+          api.listener.on("group_event", async (event: GroupEvent) => {
+            const poll = extractInboundPollInfo(event);
+            if (!poll) return;
+
+            const eventData = asObject(event.data);
+            const groupTopic = asObject(eventData?.groupTopic);
+            const actorId =
+              getStringCandidate(eventData ?? {}, ["sourceId", "creatorId", "actorId", "editorId"]) ||
+              getStringCandidate(groupTopic ?? {}, ["creatorId", "editorId"]);
+            const threadName = getStringCandidate(eventData ?? {}, ["groupName"]);
+            const timestampSource =
+              eventData?.time ?? groupTopic?.createTime ?? groupTopic?.editTime ?? Date.now();
+            const timestamp = toEpochSeconds(timestampSource);
+
+            const payload = {
+              kind: "group_event",
+              event: "poll",
+              threadId: event.threadId,
+              targetId: event.threadId,
+              conversationId: event.threadId,
+              type: ThreadType.Group,
+              timestamp,
+              groupEventType: event.type,
+              act: event.act,
+              poll,
+              pollId: poll.pollId,
+              pollTitle: poll.title,
+              pollOptionIds: poll.optionIds,
+              rawGroupEvent: event,
+              metadata: {
+                isGroup: true,
+                chatType: "group",
+                threadId: event.threadId,
+                targetId: event.threadId,
+                threadName: threadName || undefined,
+                senderId: actorId || undefined,
+                fromId: actorId || undefined,
+                timestamp,
+                groupEventType: event.type,
+                act: event.act,
+                poll,
+                pollId: poll.pollId,
+                pollTitle: poll.title,
+                pollOptionIds: poll.optionIds,
+                rawGroupEvent: event,
+              },
+              chatType: "group",
+              senderId: actorId || undefined,
+              senderName: undefined,
+              senderDisplayName: undefined,
+            };
+
+            writeDebugLine(
+              "listen.group_event.poll",
+              {
+                profile,
+                threadId: event.threadId,
+                groupEventType: event.type,
+                act: event.act,
+                pollId: poll.pollId,
+                pollTitle: poll.title,
+                sessionId,
+              },
+              command,
+            );
+
+            if (opts.raw) {
+              console.log(JSON.stringify(payload));
+            }
           });
 
           api.listener.on("error", (error) => {

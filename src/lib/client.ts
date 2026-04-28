@@ -8,6 +8,7 @@ import {
   type API,
   type Credentials,
   type LoginQRCallback,
+  type Options,
   Zalo,
 } from "zca-js";
 import { loadCredentials, saveCredentials } from "./store.js";
@@ -164,10 +165,11 @@ async function imageMetadataGetter(filePath: string): Promise<{
   };
 }
 
-export function createZaloClient(): Zalo {
+export function createZaloClient(options?: Partial<Pick<Options, "selfListen">>): Zalo {
   return new Zalo({
     imageMetadataGetter,
     logging: false,
+    ...options,
   });
 }
 
@@ -184,6 +186,7 @@ export function toCredentials(
 
 export async function loginWithStoredCredentials(
   profileName: string,
+  options?: Partial<Pick<Options, "selfListen">>,
 ): Promise<API> {
   const stored = await loadCredentials(profileName);
   if (!stored) {
@@ -192,7 +195,7 @@ export async function loginWithStoredCredentials(
     );
   }
 
-  const zalo = createZaloClient();
+  const zalo = createZaloClient(options);
   return zalo.login(toCredentials(stored));
 }
 

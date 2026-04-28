@@ -177,11 +177,11 @@ For media debugging, grep these events in the debug log:
 | `openzca group info <groupId>` | Get group details |
 | `openzca group members <groupId>` | List members |
 | `openzca group create <name> <members...>` | Create a group |
-| `openzca group poll create <groupId>` | Create a poll (`--question`, repeatable `--option`, optional poll flags) |
-| `openzca group poll detail <pollId>` | Get poll details |
-| `openzca group poll vote <pollId>` | Vote on a poll with repeatable `--option <id>` |
-| `openzca group poll lock <pollId>` | Close a poll |
-| `openzca group poll share <pollId>` | Share a poll |
+| `openzca group poll create <groupId>` | Create a poll (`--question`, repeatable `--option`, optional poll flags, `--json`) |
+| `openzca group poll detail <pollId>` | Get poll details (`--json`) |
+| `openzca group poll vote <pollId>` | Vote on a poll with repeatable `--option <id>` (`--json`) |
+| `openzca group poll lock <pollId>` | Close a poll (`--json`) |
+| `openzca group poll share <pollId>` | Share a poll (`--json`) |
 | `openzca group rename <groupId> <name>` | Rename group |
 | `openzca group avatar <groupId> <file>` | Change group avatar |
 | `openzca group settings <groupId>` | Update settings (`--lock-name`, `--sign-admin`, etc.) |
@@ -202,7 +202,7 @@ For media debugging, grep these events in the debug log:
 | `openzca group leave <groupId>` | Leave group |
 | `openzca group disperse <groupId>` | Disperse group |
 
-Poll creation currently targets group threads only and maps to the existing `zca-js` group poll APIs. `group poll create` requires `--question` plus at least two `--option` values, and also supports `--multi`, `--allow-add-option`, `--hide-vote-preview`, `--anonymous`, and `--expire-ms`.
+Poll creation currently targets group threads only and maps to the existing `zca-js` group poll APIs. `group poll create` requires `--question` plus at least two `--option` values, and also supports `--multi`, `--allow-add-option`, `--hide-vote-preview`, `--anonymous`, `--expire-ms`, and `--json`. Use `--json` to reliably read the returned `poll_id` and option `option_id` values for follow-up detail or vote commands.
 
 ### friend — Friend management
 
@@ -302,6 +302,7 @@ Notes:
 | `openzca listen --db` | Force DB writes for this listener session |
 | `openzca listen --no-db` | Disable DB writes for this listener session |
 | `openzca listen --keep-alive` | Auto-reconnect on disconnect |
+| `openzca listen --self` | Include events produced by the logged-in account |
 | `openzca listen --supervised --raw` | Supervisor mode with lifecycle JSON events (`session_id`, `connected`, `heartbeat`, `error`, `closed`) |
 | `openzca listen --keep-alive --recycle-ms <ms>` | Periodically recycle listener process to avoid stale sessions |
 
@@ -318,14 +319,20 @@ It also includes stable routing fields for downstream tools:
 - `senderId`, `toId`, `chatType`, `msgType`, `timestamp`
 - `mentions` (normalized mention entities: `uid`, `pos`, `len`, `type`, optional `text`)
 - `mentionIds` (flattened mention user IDs)
+- `pollId`, `pollTitle`, `pollOptionIds`, and `poll` when a message or group event carries poll metadata
+- `rawMessage` for poll message payloads, and `rawGroupEvent` for poll group-event payloads
 - `metadata.threadId`, `metadata.targetId`, `metadata.senderId`, `metadata.toId`
 - `metadata.mentions`, `metadata.mentionIds`, `metadata.mentionCount`
+- `metadata.pollId`, `metadata.pollTitle`, `metadata.pollOptionIds`, and `metadata.poll`
+- `metadata.rawMessage` / `metadata.rawGroupEvent` for poll payload schema debugging
 - `quote` and `metadata.quote` when the inbound message is a reply to a previous message
   - Includes parsed `quote.attach` and extracted `quote.mediaUrls` when attachment URLs are present.
 - `quoteMediaPath`, `quoteMediaPaths`, `quoteMediaUrl`, `quoteMediaUrls`, `quoteMediaType`, `quoteMediaTypes`
   - Present when quoted attachment URLs can be resolved/downloaded.
 
 For direct messages, `metadata.senderName` is intentionally omitted so consumers can prefer numeric IDs for routing instead of display-name targets.
+
+By default, zca-js suppresses events produced by the logged-in account. Use `listen --self --raw` when a caller needs to observe its own actions, such as a poll it just created.
 
 When a reply/quoted message is detected, `content` also appends a compact line:
 

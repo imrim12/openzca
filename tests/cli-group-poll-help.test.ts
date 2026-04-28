@@ -31,8 +31,16 @@ test("group poll create help shows the required poll flags", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--question <text>/);
   assert.match(result.stdout, /--option <text>/);
+  assert.match(result.stdout, /--json/);
   assert.match(result.stdout, /--multi/);
   assert.match(result.stdout, /--allow-add-option/);
+});
+
+test("group poll detail help shows JSON output", () => {
+  const result = runCli(["group", "poll", "detail", "--help"]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--json/);
 });
 
 test("group poll create fails locally when options are missing", () => {

@@ -93,11 +93,11 @@ Group text sends resolve unique `@Name` or `@userId` mentions against the curren
 - `openzca group info <groupId>`
 - `openzca group members <groupId> [--json]`
 - `openzca group create <name> <members...>`
-- `openzca group poll create <groupId> --question <text> --option <text> [--option <text> ...] [--multi] [--allow-add-option] [--hide-vote-preview] [--anonymous] [--expire-ms <ms>]`
-- `openzca group poll detail <pollId>`
-- `openzca group poll vote <pollId> --option <id> [--option <id> ...]`
-- `openzca group poll lock <pollId>`
-- `openzca group poll share <pollId>`
+- `openzca group poll create <groupId> --question <text> --option <text> [--option <text> ...] [--multi] [--allow-add-option] [--hide-vote-preview] [--anonymous] [--expire-ms <ms>] [--json]`
+- `openzca group poll detail <pollId> [--json]`
+- `openzca group poll vote <pollId> --option <id> [--option <id> ...] [--json]`
+- `openzca group poll lock <pollId> [--json]`
+- `openzca group poll share <pollId> [--json]`
 - `openzca group rename <groupId> <name>`
 - `openzca group avatar <groupId> <file>`
 - `openzca group settings <groupId> [--lock-name] [--unlock-name] [--sign-admin] [--no-sign-admin]`
@@ -151,7 +151,7 @@ Group text sends resolve unique `@Name` or `@userId` mentions against the curren
 - `openzca me last-online <userId>`
 
 ## Listen Command
-- `openzca listen [--echo] [--prefix <text>] [--webhook <url>] [--raw] [--keep-alive] [--supervised] [--heartbeat-ms <ms>] [--recycle-ms <ms>]`
+- `openzca listen [--echo] [--prefix <text>] [--webhook <url>] [--raw] [--self] [--keep-alive] [--supervised] [--heartbeat-ms <ms>] [--recycle-ms <ms>]`
 
 Listener media behavior (openzca additions):
 - Non-text inbound messages can be normalized into media note text in `content`.
@@ -162,6 +162,11 @@ Listener media behavior (openzca additions):
   - `mediaKind`
   - `mentions`, `mentionIds`
   - `metadata.mentions`, `metadata.mentionIds`, `metadata.mentionCount`
+  - `pollId`, `pollTitle`, `pollOptionIds`, `poll`
+  - `metadata.pollId`, `metadata.pollTitle`, `metadata.pollOptionIds`, `metadata.poll`
+  - `rawMessage` / `metadata.rawMessage` for poll message payloads
+  - `rawGroupEvent` / `metadata.rawGroupEvent` for poll group-event payloads
+- Use `--self` to include events produced by the logged-in account, including polls this profile creates.
 - Default inbound media cache path is under OpenClaw state dir:
   - `~/.openclaw/media/openzca/<profile>/inbound`
   - or `${OPENCLAW_STATE_DIR}/media/openzca/<profile>/inbound`
