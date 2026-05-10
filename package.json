@@ -44,7 +44,6 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@types/qrcode-terminal": "^0.12.2",
     "commander": "^14.0.3",
     "image-size": "^2.0.2",
     "qrcode-terminal": "^0.12.0",
@@ -53,6 +52,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "^8.2.0",
     "@types/node": "^25.2.3",
+    "@types/qrcode-terminal": "^0.12.2",
     "eslint": "^10.3.0",
     "jsonc-eslint-parser": "^3.1.0",
     "tsup": "^8.5.1",
